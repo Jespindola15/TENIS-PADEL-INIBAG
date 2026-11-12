@@ -1,0 +1,12 @@
+{
+  "name": "potrero-raqueta",
+  "private": true,
+  "scripts": {
+    "build": "python src/build.py",
+    "dev": "python src/build.py && wrangler dev",
+    "deploy": "python src/build.py && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "3.114.0"
+  }
+}

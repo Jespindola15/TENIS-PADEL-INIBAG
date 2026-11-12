@@ -1252,17 +1252,42 @@ const onEl=id=>document.getElementById(id);
 function netStatus(t){const el=onEl('onStatus');if(el)el.textContent=t;}
 function netUI(enabled){for(const id of ['onCreate','onJoin','onCode'])if(onEl(id))onEl(id).disabled=!enabled;}
 
+/* servidor propio en Cloudflare (fuera de claude.ai): misma interfaz que la sala de claude.ai */
+function onlineURL(){
+  if(window.POTRERO_ONLINE_URL)return String(window.POTRERO_ONLINE_URL).replace(/^http/,'ws').replace(/\/$/,'');
+  if(/^https?:$/.test(location.protocol)&&!/claude\.ai|claudeusercontent|anthropic/.test(location.hostname))return (location.protocol==='https:'?'wss://':'ws://')+location.host;
+  return null;}
+function cfRoom(base){return {join:name=>new Promise((ok,fail)=>{
+  let ws;try{ws=new WebSocket(base+'/room/'+name);}catch(e){fail({code:'upstream_error'});return;}
+  const handlers=[],peers=new Map(),my={};let myId=null,opened=false;
+  const snap=()=>[...peers.values(),{peer:myId||'yo',isMe:true,sameTab:true,kind:'viewer',guest:false,by:null,presence:my}];
+  const fire=(joined,left,updated)=>{const ps=snap();for(const h of handlers)try{h({peers:ps,joined,left,updated});}catch(e){console.warn(e);}};
+  const mk=(id,d)=>({peer:id,isMe:false,sameTab:false,kind:'viewer',guest:false,by:null,presence:d||{},updatedAt:Date.now()});
+  const api={name,presence:async patch=>{for(const k in patch){if(patch[k]===null)delete my[k];else my[k]=patch[k];}if(ws.readyState===1)ws.send(JSON.stringify({t:'p',d:patch}));},
+    onPeers:(h)=>{handlers.push(h);setTimeout(()=>h({peers:snap(),joined:snap(),left:[],updated:[]}),0);return()=>{const i=handlers.indexOf(h);if(i>=0)handlers.splice(i,1);};},
+    peers:snap,connected:()=>ws.readyState===1,leave:async()=>{try{ws.close();}catch(e){}}};
+  ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+    if(m.t==='hello'){myId=m.you;for(const p of m.peers||[])peers.set(p.peer,mk(p.peer,p.d));opened=true;
+      if(Object.keys(my).length)ws.send(JSON.stringify({t:'p',d:my}));ok(api);fire([...peers.values()],[],[]);}
+    else if(m.t==='j'){const p=mk(m.peer);peers.set(m.peer,p);fire([p],[],[]);if(Object.keys(my).length)ws.send(JSON.stringify({t:'p',d:my}));}
+    else if(m.t==='p'){const isNew=!peers.has(m.peer),p=mk(m.peer,m.d);peers.set(m.peer,p);fire(isNew?[p]:[],[],isNew?[]:[p]);}
+    else if(m.t==='l'){const p=peers.get(m.peer);peers.delete(m.peer);if(p)fire([],[p],[]);}};
+  ws.onclose=()=>{if(!opened){fail({code:'upstream_error'});return;}const gone=[...peers.values()];peers.clear();if(gone.length)fire([],gone,[]);};
+  setTimeout(()=>{if(!opened){fail({code:'upstream_error'});try{ws.close();}catch(e){}}},8000);
+})};}
+let netServer='claude';
 (async()=>{
   netUI(false);netStatus('Conectando…');
   let r=null;try{r=window.claude&&await claude.use('room');}catch(e){r=null;}
-  if(!r){netStatus('El modo online funciona al abrir el juego desde claude.ai, con tu cuenta y la de tu amigo invitada a esta página.');return;}
+  if(!r){const u=onlineURL();if(u){r=cfRoom(u);netServer='cloudflare';}}
+  if(!r){netStatus('El modo online necesita abrir el juego desde claude.ai o desde tu servidor de Cloudflare.');return;}
   ROOM=r;netUI(true);netStatus('Creá una partida y pasale el código a tu amigo, o escribí su código para unirte.');
 })();
 
 function randCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ';let s='';for(let i=0;i<4;i++)s+=A[(Math.random()*A.length)|0];return s;}
 async function netJoin(code,role){
   if(!ROOM)return;netUI(false);
-  try{GAME=await ROOM.join('tp-'+code.toLowerCase());}catch(e){netStatus('No se pudo entrar a la sala ('+(e&&e.code||'error')+').');netUI(true);return;}
+  try{GAME=await ROOM.join('tp-'+code.toLowerCase());}catch(e){netStatus(netServer==='cloudflare'?'No me pude conectar al servidor online. Revisá que el Worker de Cloudflare esté publicado.':'No se pudo entrar a la sala ('+(e&&e.code||'error')+').');netUI(true);return;}
   netCode=code;netRole=role;netSeq=0;netEvents=[];netSeen={};netPeer=null;netStarted=false;
   GAME.onPeers(onNetPeers,e=>{netStatus('Se cortó la conexión.');});
   if(role==='host'){
