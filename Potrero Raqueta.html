@@ -71,6 +71,10 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 .keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:4px 16px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
 .keys b{color:var(--ink);font-weight:600}
 .credit{font-size:11px;color:#6c7d93}
+.online{border:1px solid var(--line);padding:12px;background:rgba(255,255,255,.03)}
+.online input{flex:1 1 90px;min-width:90px;font:700 18px var(--display);letter-spacing:.3em;text-transform:uppercase;text-align:center;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid var(--line);padding:8px}
+.online input:disabled{opacity:.35}
+.onst{font-size:14px;color:var(--muted)}
 .over h2{font-family:var(--display);font-size:clamp(40px,7vw,70px);margin:0;transform:skewX(-8deg);text-transform:uppercase}
 .over p{color:var(--muted);margin:0}
 .fps{font-variant-numeric:tabular-nums}
@@ -96,12 +100,16 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
   <div class="card">
     <div class="logo">Potrero<em>Raqueta</em></div>
     <div class="tag">Tenis y pádel arcade, solo con raquetas. Movés tu raqueta con el mouse: la altura se ajusta sola y el golpe sale según cómo la movés al tocar la pelota.</div>
-    <div class="opt"><span>Deporte</span><div class="seg" id="segSport"><button data-v="tennis" class="on">Tenis · 1 vs 1</button><button data-v="padel">Pádel · 2 vs 2</button></div></div>
+    <div class="opt"><span>Deporte</span><div class="seg" id="segSport"><button data-v="tennis" class="on">Tenis</button><button data-v="padel">Pádel</button></div></div>
+    <div class="opt"><span>Jugadores</span><div class="seg" id="segNp"><button data-v="1" class="on">1 vs 1</button><button data-v="2">2 vs 2 · con compañero</button></div></div>
     <div class="opt" id="optSurf"><span>Superficie</span><div class="seg" id="segSurf"><button data-v="hard" class="on">Cemento</button><button data-v="clay">Polvo de ladrillo</button><button data-v="grass">Césped</button></div></div>
     <div class="opt"><span>Rival</span><div class="seg" id="segDiff"><button data-v="easy">Fácil</button><button data-v="normal" class="on">Normal</button><button data-v="hard">Difícil</button></div></div>
     <div class="opt"><span>Partido</span><div class="seg" id="segLen"><button data-v="short" class="on">Rápido · 1 set a 3</button><button data-v="set">1 set a 6</button><button data-v="bo3">Al mejor de 3</button></div></div>
     <div class="opt"><span>Gráficos</span><div class="seg" id="segQ"><button data-v="auto" class="on">Auto</button><button data-v="0">Alta</button><button data-v="1">Media</button><button data-v="2">Baja</button></div></div>
     <button class="go" id="play" disabled>Cargando…</button>
+    <div class="opt online"><span>Online · tiempo real</span>
+      <div class="seg"><button id="onCreate">Crear partida</button><input id="onCode" maxlength="4" placeholder="CÓDIGO" autocomplete="off" spellcheck="false"><button id="onJoin">Unirse</button></div>
+      <div class="onst" id="onStatus">Conectando…</div></div>
     <div class="keys">
       <div><b>Mover el mouse</b> mover la raqueta</div>
       <div><b>Barrer hacia la red</b> más potencia</div>
@@ -554,6 +562,9 @@ const OUTFITS=[
 ];
 const M={cfg:null,teams:[],players:[],human:null,state:'menu',timer:0,score:null,R:null,path:null,lastCall:null,stats:null};
 let autoplay=false,diff=DIFF.normal;
+/* online: cada compu maneja su equipo y decide lo que pasa en su lado de la cancha */
+const NET={on:false,myTeam:0,applying:false,send:()=>{}};
+const judgeHere=side=>!NET.on||side===teamSide(NET.myTeam);
 
 function newPlayer(team,slot,name,human,outfit,tone,height){
   const p={team,slot,name,human,pos:new V3(),vel:new V3(),prevPos:new V3(),rpos:new V3(),facing:0,baseFacing:0,rfacing:0,prevFacing:0,want:new V3(),
@@ -565,15 +576,15 @@ function clearPlayers(){for(const p of M.players)removeRacket(p.rk);M.players=[]
 function setupMatch(cfg){
   M.cfg=cfg;diff=DIFF[cfg.diff];surfKey=cfg.sport==='padel'?'padel':cfg.surf;
   buildVenue(cfg.sport,cfg.surf);clearPlayers();
-  const n=cfg.sport==='padel'?2:1,outs=[...OUTFITS].sort(()=>Math.random()-.5),names=[...NAMES].sort(()=>Math.random()-.5);
+  const n=cfg.np||(cfg.sport==='padel'?2:1),outs=[...OUTFITS].sort(()=>Math.random()-.5),names=[...NAMES].sort(()=>Math.random()-.5);
   M.teams=[0,1].map(t=>({idx:t,side:t===0?-1:1,players:[]}));
   for(let t=0;t<2;t++)for(let i=0;i<n;i++){
-    const human=t===0&&i===0,p=newPlayer(t,i,human?'Vos':names.pop(),human,outs[t*n+i]||outs[0],(Math.random()*3)|0,rand(.97,1.04));
+    const mt=NET.on?NET.myTeam:0,human=t===mt&&i===0,nm=human?'Vos':(NET.on&&i===0?'Rival':names.pop());
+    const p=newPlayer(t,i,nm,human,outs[t*n+i]||outs[0],(Math.random()*3)|0,rand(.97,1.04));p.remote=NET.on&&t!==mt;
     M.teams[t].players.push(p);M.players.push(p);}
-  M.human=M.teams[0].players[0];
-  M.teams[0].name=n===1?'Vos':'Vos / '+M.teams[0].players[1].name.split(' ').pop();
-  M.teams[1].name=n===1?M.teams[1].players[0].name:M.teams[1].players.map(p=>p.name.split(' ').pop()).join(' / ');
-  const L=cfg.len;M.score={sets:[],games:[0,0],pts:[0,0],tb:false,setTo:L==='short'?3:6,setsTo:L==='bo3'?2:1,server:{team:Math.random()<.5?0:1,idx:[0,0]},serveNo:1,totalGames:0,tbFirst:0,tbStartServer:0};
+  const mt=NET.on?NET.myTeam:0;M.human=M.teams[mt].players[0];
+  for(let t=0;t<2;t++){const P=M.teams[t].players;M.teams[t].name=n===1?P[0].name:P[0].name+' / '+P[1].name.split(' ').pop();}
+  const L=cfg.len;M.score={sets:[],games:[0,0],pts:[0,0],tb:false,setTo:L==='short'?3:6,setsTo:L==='bo3'?2:1,server:{team:cfg.firstServer??(Math.random()<.5?0:1),idx:[0,0]},serveNo:1,totalGames:0,tbFirst:0,tbStartServer:0};
   M.stats={aces:[0,0],winners:[0,0],errors:[0,0],df:[0,0],fastest:0};
   M.state='serve';setupServe();
 }
@@ -581,7 +592,8 @@ function setupMatch(cfg){
 const teamSide=t=>M.teams[t].side;
 function faceOf(side){return side<0?0:Math.PI;}
 function inServeBox(x,z,box){return x>=box.x0-BR&&x<=box.x1+BR&&z>=box.z0-BR&&z<=box.z1+BR;}
-function inCourt(x,z,side){const hw=(C.walls||M.cfg.sport==='padel')?C.HWd:C.HWs;return Math.abs(x)<=hw+BR&&z*side>=-BR&&Math.abs(z)<=C.HL+BR;}
+const doubles=()=>(M.cfg.np||(M.cfg.sport==='padel'?2:1))===2;
+function inCourt(x,z,side){const hw=(C.walls||doubles())?C.HWd:C.HWs;return Math.abs(x)<=hw+BR&&z*side>=-BR&&Math.abs(z)<=C.HL+BR;}
 
 /* ---------- saque ---------- */
 function serverPlayer(){const s=M.score.server,T=M.teams[s.team];return T.players[s.idx[s.team]%T.players.length];}
@@ -612,7 +624,7 @@ function startToss(){const s=M.serve,p=s.server;s.phase='toss';s.tossT=0;ball.he
   if(M.cfg.sport==='padel'){ball.pos.set(p.pos.x+F.x*.12,.95,p.pos.z+F.z*.12);ball.vel.set(0,-.5,0);}
   else{ball.pos.set(p.pos.x+F.x*.12,1.55,p.pos.z+F.z*.12);ball.vel.set(0,5.3,0);}
   ball.w.set(0,0,0);M.tossBall=true;
-  sfx('toss');
+  sfx('toss');if(!NET.applying)NET.send('toss',{});
 }
 function hitServe(quality,aimX){
   const s=M.serve,p=s.server,S=M.score,side=teamSide(p.team),rside=-side,padel=M.cfg.sport==='padel';
@@ -628,9 +640,11 @@ function hitServe(quality,aimX){
   M.stats.fastest=Math.max(M.stats.fastest,ball.vel.length()*3.6);
   showSpeed(ball.vel.length()*3.6);
   beginFlight(p,true);s.phase='flight';
-  sfx('hit',{v:ball.vel.length(),serve:true});
+  sfx('hit',{v:ball.vel.length(),serve:true});netHit(p,true,'serve');
 }
 
+function netHit(p,serve,type){if(!NET.on||NET.applying)return;const r=v=>[+v.x.toFixed(4),+v.y.toFixed(4),+v.z.toFixed(4)];
+  NET.send('hit',{pid:M.players.indexOf(p),serve,type,p:r(ball.pos),v:r(ball.vel),w:r(ball.w),t:Date.now()});}
 /* ---------- vuelo de la pelota y reglas ---------- */
 function beginFlight(hitter,serve){
   M.R={hitTeam:hitter.team,hitter,bounces:0,serve,cord:false,crossed:false};
@@ -655,7 +669,7 @@ function onBallEvent(type,d){
   const hs=teamSide(R.hitTeam);
   if(type==='bounce'){
     sfx('bounce',{v:d.v});markMesh.position.set(d.x,.006,d.z);markMesh.material.opacity=M.cfg.sport==='padel'||surfKey!=='clay'?0:.55;markMesh.rotation.z=Math.atan2(ball.vel.x,ball.vel.z);
-    const side=Math.sign(d.z)||1;
+    const side=Math.sign(d.z)||1;if(!judgeHere(side))return;
     if(R.serve&&R.bounces===0){
       if(side!==hs&&inServeBox(d.x,d.z,M.serve.box)){if(R.cord){return endPoint(null,'LET','Se repite el saque');}R.bounces=1;R.serveIn=true;M.state='rally';return;}
       if(R.cord&&side!==hs){}// red y afuera: falta común
@@ -667,19 +681,21 @@ function onBallEvent(type,d){
     if(R.bounces===0){if(!inCourt(d.x,d.z,side))return endPoint(1-R.hitTeam,'FUERA',null,'error');R.bounces=1;return;}
     return endPoint(R.hitTeam,R.serve?'¡ACE!':'¡GANADOR!',null,'winner');
   }
-  if(type==='wall'){sfx(d.glass?'glass':'fence',{v:hyp(ball.vel.x,ball.vel.z)});
+  if(type==='wall'){sfx(d.glass?'glass':'fence',{v:hyp(ball.vel.x,ball.vel.z)});if(!judgeHere(d.side))return;
     if(R.bounces===0&&d.side!==hs)return R.serve?fault('FALTA'):endPoint(1-R.hitTeam,'PARED',null,'error');
     if(R.serve&&R.bounces>=1&&!d.glass)return endPoint(R.hitTeam,'¡ACE!',null,'winner');
     return;}
-  if(type==='gone'){if(R.bounces>=1)return endPoint(R.hitTeam,'¡AFUERA DE LA PISTA!',null,'winner');return endPoint(1-R.hitTeam,'FUERA',null,'error');}
+  if(type==='gone'){if(!judgeHere(Math.sign(ball.pos.z)||1))return;if(R.bounces>=1)return endPoint(R.hitTeam,'¡AFUERA DE LA PISTA!',null,'winner');return endPoint(1-R.hitTeam,'FUERA',null,'error');}
 }
 function fault(call){
+  if(NET.on&&!NET.applying)NET.send('fault',{call,before:scoreKey()});
   const S=M.score,t=M.serve.server.team;
   if(S.serveNo===1){S.serveNo=2;showCall(call,'Segundo saque');M.state='between';M.timer=1.3;M.after=()=>{M.state='serve';setupServe();};sfx('fault');return;}
   M.stats.df[t]++;endPoint(1-t,'DOBLE FALTA',null,'error');
 }
 
 /* ---------- puntaje ---------- */
+const scoreKey=()=>JSON.stringify([M.score.sets,M.score.games,M.score.pts,M.score.serveNo]);
 const PT=['0','15','30','40'];
 function pointText(){const S=M.score,[a,b]=S.pts;
   if(S.tb)return a+' - '+b;
@@ -687,6 +703,7 @@ function pointText(){const S=M.score,[a,b]=S.pts;
   const sv=M.score.server.team;const x=PT[Math.min(a,3)],y=PT[Math.min(b,3)];return sv===0?x+' - '+y:y+' - '+x;}
 function endPoint(winner,call,sub,kind){
   if(M.state==='point'||M.state==='between'||M.state==='over')return;
+  if(NET.on&&!NET.applying)NET.send('point',{winner,call,sub:sub||null,kind:kind||null,before:JSON.parse(JSON.stringify(M.score))});
   M.helpOff=true;helpRing.material.opacity=0;
   if(winner===null){M.state='between';M.timer=1.4;showCall(call,sub||'');M.after=()=>{M.state='serve';setupServe();};return;}
   const S=M.score;S.pts[winner]++;
@@ -759,7 +776,7 @@ function commitSwing(p,c,type,pressT){
 
 /* ---------- golpe: dirección, fuerza y efecto ---------- */
 function shotTarget(p,type,ax,ay,q){
-  const opp=-teamSide(p.team),fc=faceOf(teamSide(p.team)),Rx=-Math.cos(fc),hw=(M.cfg.sport==='padel'?C.HWd:C.HWs),HL=C.HL;
+  const opp=-teamSide(p.team),fc=faceOf(teamSide(p.team)),Rx=-Math.cos(fc),hw=(C.walls||doubles()?C.HWd:C.HWs),HL=C.HL;
   const marg=p.human&&!autoplay?.45:diff.margin;
   let depth;
   if(type==='drop')depth=lerp(1.6,3.2,(ay+1)/2);
@@ -807,10 +824,10 @@ function doShot(p,type,ax,ay,q,comfy,volley){
   p.lastShot=type;p.hitCD=.3;
   const fc=faceOf(teamSide(p.team));p.swingFx={t:0,dur:.38,dir:Math.sign((tgt.x-ball.pos.x)*-Math.cos(fc))||1,type};
   beginFlight(p,false);M.R.hitCount=1;
-  sfx('hit',{v:ball.vel.length(),smash:type==='smash'});
+  sfx('hit',{v:ball.vel.length(),smash:type==='smash'});netHit(p,false,type);
   if(!human){const deep=Math.abs(tgt.z)>C.HL-3;p.netMode=(type==='smash'||volley)?true:(deep&&Math.random()<(M.cfg.sport==='padel'?.55:.14));}
-  for(const t of M.teams[p.team].players)if(t!==p&&M.cfg.sport==='padel'&&!(t.human&&!autoplay))t.netMode=p.netMode||type==='lob';
-  for(const t of M.teams[1-p.team].players)if(type==='lob'&&M.cfg.sport==='padel')t.netMode=false;
+  for(const t of M.teams[p.team].players)if(t!==p&&doubles()&&!(t.human&&!autoplay))t.netMode=p.netMode||type==='lob';
+  for(const t of M.teams[1-p.team].players)if(type==='lob'&&doubles())t.netMode=false;
 }
 
 /* ---------- IA ---------- */
@@ -844,9 +861,9 @@ function aiThink(p,dt){
   if(p.commit){p.want.set(0,0,0);return;}
   // recuperar posición
   const side=teamSide(p.team),padel=M.cfg.sport==='padel';let hx=0,hz;
-  if(padel){hx=(p.lane==='R'?1:-1)*(-Math.cos(p.baseFacing))*2.45+ball.pos.x*.25;hz=side*(p.netMode?3.4:C.HL-2.4);
-    if(R&&R.hitTeam===p.team&&!p.netMode)hz=side*(C.HL-2.6);}
-  else{hz=side*(p.netMode?3.2:C.HL+.7);
+  if(doubles()){hx=(p.lane==='R'?1:-1)*(-Math.cos(p.baseFacing))*(padel?2.45:2.7)+ball.pos.x*.25;hz=side*(p.netMode?(padel?3.4:3.3):(padel?C.HL-2.4:C.HL+.3));
+    if(R&&R.hitTeam===p.team&&!p.netMode)hz=side*(padel?C.HL-2.6:C.HL+.2);}
+  else{hz=side*(p.netMode?3.2:(padel?C.HL-2.3:C.HL+.7));
     // ponerse en la bisectriz del posible golpe rival
     hx=clamp(ball.pos.x*.45,-2.6,2.6);
     if(R&&R.hitTeam===p.team&&M.path){const lp=M.path.evs.find(e=>e.type==='bounce');if(lp)hx=clamp(lp.x*.35,-2.2,2.2);}}
@@ -892,7 +909,7 @@ function serveUpdate(dt){
       if(p.human&&!autoplay)meterSet(s.tossT/ideal*.885);
       if(!p.human||autoplay){const want=ideal-.2+gauss()*(.22-diff.pow*.17);if(s.tossT>=want)swingServe(p,0);}
       if(M.cfg.sport==='padel'?s.tossT>1.5:ball.pos.y<.5){
-        s.phase='ready';ball.live=false;ball.held=p;placeBallInHand(p);meterShow(false);showSub('Lanzá de nuevo');s.wait=.8;}
+        s.phase='ready';ball.live=false;ball.held=p;placeBallInHand(p);meterShow(false);showSub('Lanzá de nuevo');s.wait=.8;NET.send('retoss',{});}
     }
     if(s.phase==='swing'&&simT>=s.hitAt-1e-6){
       const fc=p.baseFacing,Rx=-Math.cos(fc),bx=Math.sign(s.box.x0+s.box.x1);
@@ -952,18 +969,18 @@ function stepSim(dt,inp){
   if(M.state==='point'||M.state==='between'||M.state==='ends'||M.state==='over'){
     M.timer-=dt;
     if(ball.live)for(let k=0;k<2;k++)ballStep(ball,BDT,null);
-    for(const p of M.players){p.want.set(0,0,0);p.auto=false;p.commit=null;if(p.human&&!autoplay)humanControl(p,inp,dt);movePlayer(p,dt);}
+    for(const p of M.players){if(p.remote)continue;p.want.set(0,0,0);p.auto=false;p.commit=null;if(p.human&&!autoplay)humanControl(p,inp,dt);movePlayer(p,dt);}
     if(M.timer<=0){if(M.state==='over'){endScreen();M.state='done';return;}const f=M.after;M.after=null;f&&f();}
     return;}
-  for(const p of M.players){if(p.human&&!autoplay)humanControl(p,inp,dt);else aiThink(p,dt);}
-  if(M.state==='serve')serveUpdate(dt);
+  for(const p of M.players){if(p.remote)continue;if(p.human&&!autoplay)humanControl(p,inp,dt);else aiThink(p,dt);}
+  if(M.state==='serve'&&!M.serve.server.remote)serveUpdate(dt);
   // IA: golpe en el instante planificado
-  for(const p of M.players){const sw=p.swing;if(!sw||sw.done)continue;
+  for(const p of M.players){const sw=p.swing;if(!sw||sw.done||p.remote)continue;
     if(simT>=sw.tc-BDT*.5){
       _rk.set(p.pos.x,p.rh,p.pos.z);const miss=_rk.distanceTo(ball.pos);
       if(canHit(p)&&miss<=.55+(sw.kind==='smash'?.2:0))executeHit(p);else{sw.done=true;p.commit=null;p.auto=false;}
     }}
-  for(const p of M.players)movePlayer(p,dt);
+  for(const p of M.players)if(!p.remote)movePlayer(p,dt);
   // pelota, y tu raqueta le pega cuando la toca
   if(ball.live){
     const me=M.players.filter(p=>p.human&&!autoplay);
@@ -973,7 +990,7 @@ function stepSim(dt,inp){
         let hit=false;for(const w of [u-.5,u]){_rk.set(lerp(p.prevPos.x,p.pos.x,w),p.rh,lerp(p.prevPos.z,p.pos.z,w));if(segDist(_bp,ball.pos,_rk)<.36+diff.assist*.5)hit=true;}
         if(hit){executeHitMouse(p,inp);break;}}}}
   else if(ball.held)placeBallInHand(ball.held);
-  if(M.state==='rally'&&ball.pos.y<=BR+1e-3&&ball.vel.lengthSq()<.05){const R=M.R;endPoint(R.bounces>=1?R.hitTeam:1-R.hitTeam,R.bounces>=1?'PUNTO':'RED');}
+  if(M.state==='rally'&&ball.pos.y<=BR+1e-3&&ball.vel.lengthSq()<.05&&judgeHere(Math.sign(ball.pos.z)||1)){const R=M.R;endPoint(R.bounces>=1?R.hitTeam:1-R.hitTeam,R.bounces>=1?'PUNTO':'RED');}
   if(M.state==='serve'&&M.serve.phase==='flight'&&M.R){M.state='rally';}
 }
 
@@ -1031,7 +1048,7 @@ function updateCamera(dt){
 /* ---------- interfaz ---------- */
 const $=id=>document.getElementById(id);
 let callT=0,subT=0,speedT=0;
-function showCall(txt,sub){$('call').innerHTML=txt+(sub?'<small>'+sub+'</small>':'');$('call').classList.add('on');callT=1.9;}
+function showCall(txt,sub){if(txt==null||txt==='null')return;$('call').innerHTML=txt+(sub?'<small>'+sub+'</small>':'');$('call').classList.add('on');callT=1.9;}
 function showSub(txt){$('sub').textContent=txt;$('sub').classList.add('on');subT=1.6;}
 function showSpeed(kmh){$('spv').textContent=Math.round(kmh);$('speed').classList.add('on');speedT=2.6;}
 function meterSet(v){$('meter').classList.add('on');$('mfill').style.width=clamp(v,0,1.05)*100+'%';}
@@ -1049,7 +1066,7 @@ let fadeEl=null;
 function fade(v){if(!fadeEl){fadeEl=document.createElement('div');Object.assign(fadeEl.style,{position:'fixed',inset:'0',background:'#06101c',opacity:'0',transition:'opacity .45s',pointerEvents:'none'});document.body.appendChild(fadeEl);}
   fadeEl.style.opacity=v;cam.cut=true;}
 function endScreen(){
-  const w=M.winner,S=M.score,won=w===0;
+  const w=M.winner,S=M.score,won=w===(NET.on?NET.myTeam:0);
   $('endT').textContent=won?'¡Ganaste!':'Perdiste';
   $('endS').textContent=M.teams[w].name+' gana '+S.sets.map(s=>s[0]+'-'+s[1]).join(', ')+' · Aces '+M.stats.aces[0]+'-'+M.stats.aces[1]+' · Ganadores '+M.stats.winners[0]+'-'+M.stats.winners[1]+' · Saque más rápido '+Math.round(M.stats.fastest)+' km/h';
   $('end').hidden=false;
@@ -1130,17 +1147,19 @@ let menuA=0;
 function menuCam(dt){menuA+=dt*.08;camera.position.set(Math.sin(menuA)*22,9,Math.cos(menuA)*22);camera.lookAt(0,0,0);}
 
 /* ---------- menú ---------- */
-const CFG={sport:'tennis',surf:'hard',diff:'normal',len:'short'};
+const CFG={sport:'tennis',surf:'hard',diff:'normal',len:'short',np:1};
 function seg(id,key,cb){const el=$(id);el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;for(const x of el.children)x.classList.toggle('on',x===b);CFG[key]=b.dataset.v;cb&&cb(b.dataset.v);});}
-seg('segSport','sport',v=>{$('optSurf').hidden=v==='padel';buildVenue(CFG.sport,CFG.surf);});
+seg('segSport','sport',v=>{$('optSurf').hidden=v==='padel';buildVenue(CFG.sport,CFG.surf);
+  CFG.np=v==='padel'?2:1;for(const b of $('segNp').children)b.classList.toggle('on',+b.dataset.v===CFG.np);});
+seg('segNp','np',v=>{CFG.np=+v;});
 seg('segSurf','surf',()=>buildVenue(CFG.sport,CFG.surf));seg('segDiff','diff');seg('segLen','len');
 seg('segQ','q',v=>{qMode=v==='auto'?'auto':'fixed';applyQuality(v==='auto'?0:+v);});
-function startGame(){audioInit();renderer.domElement.style.cursor='none';$('menu').hidden=true;$('end').hidden=true;$('pause').hidden=true;$('hud').hidden=false;setupMatch(Object.assign({},CFG));cam.cut=true;}
-$('play').addEventListener('click',startGame);$('again').addEventListener('click',startGame);
-$('toMenu').addEventListener('click',()=>{renderer.domElement.style.cursor='';$('end').hidden=true;$('hud').hidden=true;$('menu').hidden=false;M.state='menu';});
-function togglePause(){if(M.state==='paused'){M.state=M.prevState;$('pause').hidden=true;}else{M.prevState=M.state;M.state='paused';$('pause').hidden=false;}}
-$('resume').addEventListener('click',togglePause);
-$('quit').addEventListener('click',()=>{$('pause').hidden=true;$('hud').hidden=true;$('menu').hidden=false;M.state='menu';});
+function startGame(){audioInit();renderer.domElement.style.cursor='none';$('menu').hidden=true;$('end').hidden=true;$('pause').hidden=true;$('hud').hidden=false;setupMatch(Object.assign({},arguments[0]&&arguments[0].sport?arguments[0]:CFG));cam.cut=true;}
+$('play').addEventListener('click',()=>startGame());$('again').addEventListener('click',()=>{if(NET.on)netRematch();else startGame();});
+$('toMenu').addEventListener('click',()=>{netLeave&&netLeave();renderer.domElement.style.cursor='';$('end').hidden=true;$('hud').hidden=true;$('menu').hidden=false;M.state='menu';});
+function togglePause(){if(NET.on){$('pause').hidden=!$('pause').hidden;return;}if(M.state==='paused'){M.state=M.prevState;$('pause').hidden=true;}else{M.prevState=M.state;M.state='paused';$('pause').hidden=false;}}
+$('resume').addEventListener('click',()=>togglePause());
+$('quit').addEventListener('click',()=>{netLeave&&netLeave();$('pause').hidden=true;$('hud').hidden=true;$('menu').hidden=false;M.state='menu';});
 
 /* ---------- arranque ---------- */
 buildVenue('tennis','hard');
@@ -1223,6 +1242,132 @@ const _uc=updateCamera;updateCamera=function(dt){
   if(cam.shake>0){cam.shake=Math.max(0,cam.shake-dt);const s=cam.shake*.12;camera.position.x+=rand(-s,s);camera.position.y+=rand(-s,s);}
 };
 const _sm=setupMatch;setupMatch=function(c){_sm(c);cam.introT=2.6;if(M.serve)M.serve.wait+=2.2;};
+
+/* ================= Online en tiempo real (sala de la página) =================
+   Cada compu mueve su raqueta (y su compañero en pádel) sin demora y decide lo que pasa
+   en SU lado de la cancha: golpes, piques, faltas y puntos. Todo viaja en la "presencia"
+   de una sala con nombre (unas 30 veces por segundo): posiciones y una cola corta de eventos. */
+let netCfg=null,ROOM=null,GAME=null,netCode=null,netRole=null,netSeq=0,netEvents=[],netSeen={},netPeer=null,netStarted=false,netStatusT=null;
+const onEl=id=>document.getElementById(id);
+function netStatus(t){const el=onEl('onStatus');if(el)el.textContent=t;}
+function netUI(enabled){for(const id of ['onCreate','onJoin','onCode'])if(onEl(id))onEl(id).disabled=!enabled;}
+
+(async()=>{
+  netUI(false);netStatus('Conectando…');
+  let r=null;try{r=window.claude&&await claude.use('room');}catch(e){r=null;}
+  if(!r){netStatus('El modo online funciona al abrir el juego desde claude.ai, con tu cuenta y la de tu amigo invitada a esta página.');return;}
+  ROOM=r;netUI(true);netStatus('Creá una partida y pasale el código a tu amigo, o escribí su código para unirte.');
+})();
+
+function randCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ';let s='';for(let i=0;i<4;i++)s+=A[(Math.random()*A.length)|0];return s;}
+async function netJoin(code,role){
+  if(!ROOM)return;netUI(false);
+  try{GAME=await ROOM.join('tp-'+code.toLowerCase());}catch(e){netStatus('No se pudo entrar a la sala ('+(e&&e.code||'error')+').');netUI(true);return;}
+  netCode=code;netRole=role;netSeq=0;netEvents=[];netSeen={};netPeer=null;netStarted=false;
+  GAME.onPeers(onNetPeers,e=>{netStatus('Se cortó la conexión.');});
+  if(role==='host'){
+    const cfg=Object.assign({},CFG,{firstServer:Math.random()<.5?0:1});netCfg=cfg;
+    GAME.presence({role:'host',cfg,go:false});
+    netStatus('Código: '+code+' · esperando a tu rival…');
+  }else{
+    GAME.presence({role:'guest'});netStatus('Buscando la partida '+code+'…');
+    clearTimeout(netStatusT);netStatusT=setTimeout(()=>{if(!netStarted)netStatus('No encontré la partida '+code+'. Revisá el código.');},9000);
+  }
+}
+function onNetPeers(ch){
+  const others=ch.peers.filter(p=>!p.isMe&&p.kind==='viewer');
+  // inicio de la partida
+  if(!netStarted){
+    if(netRole==='host'){const g=others.find(p=>p.presence&&p.presence.role==='guest');
+      if(g){netPeer=g.peer;GAME.presence({go:true});netStart(netCfg,0);}}
+    else{const h=others.find(p=>p.presence&&p.presence.role==='host'&&p.presence.go&&p.presence.cfg);
+      if(h){netPeer=h.peer;netStart(h.presence.cfg,1);}}
+    return;}
+  // rival se fue
+  if(ch.left.some(p=>p.peer===netPeer)&&NET.on){showCall('TU RIVAL SE FUE','Volvés al menú');setTimeout(()=>{netLeave();$('hud').hidden=true;$('end').hidden=true;$('menu').hidden=false;M.state='menu';},2600);return;}
+  const peer=others.find(p=>p.peer===netPeer);if(peer)netReceive(peer.presence);
+}
+function netStart(cfg,team){
+  if(!cfg)return;netStarted=true;clearTimeout(netStatusT);
+  NET.on=true;NET.myTeam=team;autoplay=false;
+  netStatus('¡Partida en juego!');
+  startGame(cfg);
+}
+function netLeave(){NET.on=false;netStarted=false;if(GAME){try{GAME.leave();}catch(e){}}GAME=null;netUI(!!ROOM);if(ROOM)netStatus('Creá una partida o unite con un código.');}
+function netRematch(){// revancha: el anfitrión arranca de nuevo con la misma sala
+  $('end').hidden=true;const cfg=Object.assign({},M.cfg,{firstServer:Math.random()<.5?0:1});
+  if(netRole==='host'){GAME&&GAME.presence({cfg,go:true,rematch:Date.now()});startGame(cfg);}else showSub('Esperando que tu rival pida la revancha…');}
+
+/* ---------- envío: eventos en cola + estado continuo ---------- */
+NET.send=(k,d)=>{if(!NET.on||!GAME)return;netEvents.push(Object.assign({s:++netSeq,k},d));if(netEvents.length>8)netEvents.shift();netPush(true);};
+let netLastPush=0;
+function netPush(force){
+  if(!NET.on||!GAME)return;const now=performance.now();if(!force&&now-netLastPush<30)return;netLastPush=now;
+  const f=v=>Math.round(v*1000)/1000;
+  const pl=M.teams[NET.myTeam].players.map(p=>[f(p.pos.x),f(p.pos.z),f(p.rh),f(p.vel.x),f(p.vel.z)]);
+  const o={pl,ev:netEvents};
+  if(ball.live&&judgeHere(Math.sign(ball.pos.z)||1))o.b=[f(ball.pos.x),f(ball.pos.y),f(ball.pos.z),f(ball.vel.x),f(ball.vel.y),f(ball.vel.z),Date.now()];else o.b=null;
+  GAME.presence(o).catch(()=>{});
+}
+
+/* ---------- recepción ---------- */
+function netReceive(pr){
+  if(!pr||!NET.on)return;
+  if(pr.rematch&&pr.rematch!==netSeen.rematch&&netRole==='guest'&&pr.cfg){netSeen.rematch=pr.rematch;$('end').hidden=true;startGame(pr.cfg);return;}
+  // raquetas del rival
+  const T=M.teams[1-NET.myTeam];if(Array.isArray(pr.pl))pr.pl.forEach((a,i)=>{const p=T.players[i];if(!p||!Array.isArray(a))return;
+    p.netT={x:+a[0]||0,z:+a[1]||0,h:+a[2]||1};p.pos.x=p.netT.x;p.pos.z=p.netT.z;p.rh=p.netT.h;p.vel.x=+a[3]||0;p.vel.z=+a[4]||0;});
+  // eventos nuevos, en orden
+  if(Array.isArray(pr.ev))for(const e of pr.ev){if(!e||typeof e.s!=='number'||e.s<=(netSeen.s||0))continue;netSeen.s=e.s;netApply(e);}
+  // corrección suave de la pelota desde quien la tiene de su lado
+  if(Array.isArray(pr.b)&&ball.live&&!judgeHere(Math.sign(pr.b[2])||1)){
+    const dt=clamp((Date.now()-pr.b[6])/1000,0,.25),b={pos:new V3(pr.b[0],pr.b[1],pr.b[2]),vel:new V3(pr.b[3],pr.b[4],pr.b[5]),w:ball.w.clone()};
+    for(let t=0;t<dt;t+=BDT)ballStep(b,BDT,null);
+    const err=b.pos.distanceTo(ball.pos);if(err>.6){ball.pos.copy(b.pos);ball.vel.copy(b.vel);}else if(err>.04){ball.pos.lerp(b.pos,.25);ball.vel.lerp(b.vel,.25);}
+  }
+}
+function netApply(e){
+  NET.applying=true;
+  try{
+    if(e.k==='hit'){const p=M.players[e.pid];if(!p||!Array.isArray(e.p))return;
+      ball.pos.set(...e.p);ball.vel.set(...e.v);ball.w.set(...e.w);ball.live=true;ball.held=null;M.tossBall=false;
+      if(e.serve&&M.serve){M.serve.phase='flight';showSpeed(ball.vel.length()*3.6);M.stats.fastest=Math.max(M.stats.fastest,ball.vel.length()*3.6);}
+      p.swingFx={t:0,dur:.38,dir:1,type:e.type};p.hitCD=.3;
+      if(M.state==='serve'&&!e.serve){}
+      beginFlight(p,!!e.serve);M.R.hitCount=1;sfx('hit',{v:ball.vel.length(),serve:e.serve,smash:e.type==='smash'});
+      // adelantar la pelota lo que tardó el mensaje
+      const dt=clamp((Date.now()-e.t)/1000,0,.3);let n=Math.round(dt/BDT);
+      NET.applying=false;
+      for(let k=0;k<n;k++){ballStep(ball,BDT,onBallEvent);if(M.state!=='rally'&&M.state!=='serve')break;}
+      if(M.path)M.path.t0-=n*BDT;
+      if(M.state==='serve'&&M.serve.phase==='flight')M.state='rally';
+    }
+    else if(e.k==='toss'){if(M.state==='serve'&&M.serve&&M.serve.server.remote)startToss();}
+    else if(e.k==='retoss'){if(M.serve&&M.serve.server.remote){M.serve.phase='ready';ball.live=false;ball.held=M.serve.server;}}
+    else if(e.k==='fault'){if(typeof e.before==='string'&&e.before!==scoreKey()){/* desfasado: se respeta al juez */}
+      if(M.state==='rally'||M.state==='serve')fault(String(e.call||'FALTA'));}
+    else if(e.k==='point'){
+      if(e.before&&typeof e.before==='object'&&JSON.stringify(e.before)!==JSON.stringify(M.score))M.score=JSON.parse(JSON.stringify(e.before));
+      if(M.state==='point'||M.state==='between'){M.state='rally';}
+      endPoint(e.winner===0||e.winner===1?e.winner:null,String(e.call||''),e.sub?String(e.sub):null,e.kind||undefined);
+    }
+  }finally{NET.applying=false;}
+}
+
+/* ---------- integrar al bucle ---------- */
+const _lr=lerpRender;lerpRender=function(a){_lr(a);
+  if(!NET.on)return;
+  for(const p of M.players){if(!p.remote||!p.netT)continue;const k=.35;
+    if(!p.sm)p.sm={x:p.netT.x,z:p.netT.z,h:p.netT.h};
+    p.sm.x+=(p.netT.x-p.sm.x)*k;p.sm.z+=(p.netT.z-p.sm.z)*k;p.sm.h+=(p.netT.h-p.sm.h)*k;
+    p.rpos.set(p.sm.x,0,p.sm.z);p.rhR=p.sm.h;}
+  netPush(false);
+};
+
+/* ---------- botones del menú ---------- */
+onEl('onCreate')&&onEl('onCreate').addEventListener('click',()=>{audioInit();netJoin(randCode(),'host');});
+onEl('onJoin')&&onEl('onJoin').addEventListener('click',()=>{audioInit();const c=(onEl('onCode').value||'').toUpperCase().replace(/[^A-Z]/g,'');if(c.length!==4){netStatus('El código tiene 4 letras.');return;}netJoin(c,'guest');});
+onEl('onCode')&&onEl('onCode').addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter')onEl('onJoin').click();});
 
 
 </script>

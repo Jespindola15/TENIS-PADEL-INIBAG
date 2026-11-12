@@ -1,0 +1,141 @@
+<meta charset="utf-8">
+<title>Potrero Raqueta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Juego de tenis y pádel: lienzo 3D a pantalla completa + marcador estilo transmisión, tonos de pelota de tenis */
+:root{
+  --bg:#0a1626; --panel:rgba(8,18,34,.9); --panel-solid:#0d1d33; --line:rgba(255,255,255,.14);
+  --ink:#f1f5fa; --muted:#9db0c8; --ball:#d9f23a; --ball-ink:#16200a; --clay:#d2643a; --court:#2c63b0; --good:#3fd47a; --bad:#ff5a4e;
+  --display:'Saira Condensed','Arial Narrow',Impact,sans-serif;
+  --body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden}
+#game{position:fixed;inset:0}
+#game canvas{display:block;width:100%;height:100%}
+.hud{position:fixed;inset:0;pointer-events:none}
+
+/* marcador */
+.board{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));left:calc(16px + env(safe-area-inset-left,0px));font-family:var(--display);font-weight:700;letter-spacing:.04em;box-shadow:0 10px 26px rgba(0,0,0,.45);min-width:260px}
+.board .row{display:flex;align-items:stretch;background:var(--panel-solid);border-bottom:1px solid var(--line)}
+.board .row:last-child{border-bottom:0}
+.board .nm{flex:1;display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:18px;white-space:nowrap}
+.board .sv{width:9px;height:9px;border-radius:50%;background:var(--ball);box-shadow:0 0 8px var(--ball);visibility:hidden}
+.board .row.serving .sv{visibility:visible}
+.board .sets{display:flex}
+.board .sets span{width:26px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--muted);border-left:1px solid var(--line)}
+.board .sets span.cur{color:var(--ink)}
+.board .pts{width:44px;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ball);color:var(--ball-ink)}
+.board .chip{width:5px;align-self:stretch}
+
+.call{position:absolute;left:50%;top:30%;transform:translate(-50%,-50%) skewX(-8deg);font-family:var(--display);font-weight:800;font-size:clamp(40px,8vw,92px);letter-spacing:.04em;color:var(--ink);
+  text-shadow:0 6px 0 rgba(0,0,0,.35),0 0 30px rgba(0,0,0,.4);opacity:0;transition:opacity .2s,transform .25s;white-space:nowrap}
+.call.on{opacity:1;transform:translate(-50%,-50%) skewX(-8deg) scale(1.04)}
+.call small{display:block;text-align:center;font-size:.36em;color:var(--ball);letter-spacing:.12em}
+.sub{position:absolute;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:.08em;background:var(--panel);padding:6px 14px;border-left:3px solid var(--ball);opacity:0;transition:opacity .2s;white-space:nowrap}
+.sub.on{opacity:1}
+
+/* medidor de saque */
+.meter{position:absolute;left:50%;bottom:calc(30px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(340px,70vw);opacity:0;transition:opacity .15s}
+.meter.on{opacity:1}
+.meter .lab{font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.14em;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between}
+.meter .bar{height:14px;background:rgba(0,0,0,.55);border:1px solid var(--line);position:relative;overflow:hidden}
+.meter .fill{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,#3fd47a,#d9f23a 70%,#ff8a3d)}
+.meter .sweet{position:absolute;top:0;bottom:0;left:84%;width:9%;border-left:2px solid #fff;border-right:2px solid #fff;opacity:.7}
+
+.speed{position:absolute;right:calc(16px + env(safe-area-inset-right,0px));top:calc(14px + env(safe-area-inset-top,0px));font-family:var(--display);font-weight:700;background:var(--panel);padding:6px 12px;text-align:right;opacity:0;transition:opacity .3s}
+.speed.on{opacity:1}
+.speed b{font-size:26px;color:var(--ball)}
+.speed span{display:block;font-size:12px;letter-spacing:.14em;color:var(--muted)}
+.help{position:absolute;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);background:var(--panel);padding:5px 10px}
+.help b{color:var(--ink)}
+
+/* menú */
+.menu{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(1200px 700px at 70% 20%,rgba(44,99,176,.55),transparent 60%),radial-gradient(900px 600px at 10% 90%,rgba(210,100,58,.35),transparent 60%),rgba(6,12,22,.82);
+  padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));overflow:auto;pointer-events:auto}
+.card{width:min(620px,100%);display:grid;gap:16px}
+.logo{font-family:var(--display);font-weight:800;font-size:clamp(46px,9vw,84px);line-height:.88;letter-spacing:.01em;text-transform:uppercase;transform:skewX(-8deg)}
+.logo em{font-style:normal;color:var(--ball);display:block}
+.tag{color:var(--muted);margin:-6px 0 4px;font-size:15px}
+.opt{display:grid;gap:6px}
+.opt>span{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{flex:1 1 auto;min-width:96px;font:600 15px var(--body);color:var(--ink);background:rgba(255,255,255,.06);border:1px solid var(--line);padding:9px 12px;cursor:pointer;transition:background .15s,border-color .15s}
+.seg button:hover{background:rgba(255,255,255,.12)}
+.seg button.on{background:var(--ball);color:var(--ball-ink);border-color:var(--ball)}
+.seg button:disabled{opacity:.35;cursor:not-allowed}
+.go{font:800 26px var(--display);letter-spacing:.1em;text-transform:uppercase;background:var(--ball);color:var(--ball-ink);border:0;padding:14px;cursor:pointer;transform:skewX(-8deg);box-shadow:0 10px 30px rgba(217,242,58,.25)}
+.go:disabled{background:#4a5566;color:#c5ccd6;cursor:progress;box-shadow:none}
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:4px 16px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+.keys b{color:var(--ink);font-weight:600}
+.credit{font-size:11px;color:#6c7d93}
+.online{border:1px solid var(--line);padding:12px;background:rgba(255,255,255,.03)}
+.online input{flex:1 1 90px;min-width:90px;font:700 18px var(--display);letter-spacing:.3em;text-transform:uppercase;text-align:center;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid var(--line);padding:8px}
+.online input:disabled{opacity:.35}
+.onst{font-size:14px;color:var(--muted)}
+.over h2{font-family:var(--display);font-size:clamp(40px,7vw,70px);margin:0;transform:skewX(-8deg);text-transform:uppercase}
+.over p{color:var(--muted);margin:0}
+.fps{font-variant-numeric:tabular-nums}
+@media (max-width:520px){.board{min-width:0;transform:scale(.86);transform-origin:top left}.help{display:none}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+
+<div id="game"></div>
+<div class="hud" id="hud" hidden>
+  <div class="board" id="board">
+    <div class="row" id="r0"><i class="chip" id="c0"></i><div class="nm"><i class="sv"></i><span id="n0">—</span></div><div class="sets" id="s0"></div><div class="pts" id="p0">0</div></div>
+    <div class="row" id="r1"><i class="chip" id="c1"></i><div class="nm"><i class="sv"></i><span id="n1">—</span></div><div class="sets" id="s1"></div><div class="pts" id="p1">0</div></div>
+  </div>
+  <div class="speed" id="speed"><b id="spv">0</b> km/h<span>VELOCIDAD DEL SAQUE</span></div>
+  <div class="call" id="call"></div>
+  <div class="sub" id="sub"></div>
+  <div class="meter" id="meter"><div class="lab"><span>POTENCIA</span><span id="mtip">Apretá de nuevo arriba</span></div><div class="bar"><div class="sweet"></div><div class="fill" id="mfill"></div></div></div>
+  <div class="help"><b class="fps" id="fps">—</b> fps · <b>Mouse</b> raqueta · <b>Clic izq.</b> más fuerte · <b>Clic der.</b> cortado · <b>Tirar hacia atrás</b> globo · <b>Esc</b> pausa</div>
+</div>
+
+<div class="menu" id="menu">
+  <div class="card">
+    <div class="logo">Potrero<em>Raqueta</em></div>
+    <div class="tag">Tenis y pádel arcade, solo con raquetas. Movés tu raqueta con el mouse: la altura se ajusta sola y el golpe sale según cómo la movés al tocar la pelota.</div>
+    <div class="opt"><span>Deporte</span><div class="seg" id="segSport"><button data-v="tennis" class="on">Tenis</button><button data-v="padel">Pádel</button></div></div>
+    <div class="opt"><span>Jugadores</span><div class="seg" id="segNp"><button data-v="1" class="on">1 vs 1</button><button data-v="2">2 vs 2 · con compañero</button></div></div>
+    <div class="opt" id="optSurf"><span>Superficie</span><div class="seg" id="segSurf"><button data-v="hard" class="on">Cemento</button><button data-v="clay">Polvo de ladrillo</button><button data-v="grass">Césped</button></div></div>
+    <div class="opt"><span>Rival</span><div class="seg" id="segDiff"><button data-v="easy">Fácil</button><button data-v="normal" class="on">Normal</button><button data-v="hard">Difícil</button></div></div>
+    <div class="opt"><span>Partido</span><div class="seg" id="segLen"><button data-v="short" class="on">Rápido · 1 set a 3</button><button data-v="set">1 set a 6</button><button data-v="bo3">Al mejor de 3</button></div></div>
+    <div class="opt"><span>Gráficos</span><div class="seg" id="segQ"><button data-v="auto" class="on">Auto</button><button data-v="0">Alta</button><button data-v="1">Media</button><button data-v="2">Baja</button></div></div>
+    <button class="go" id="play" disabled>Cargando…</button>
+    <div class="opt online"><span>Online · tiempo real</span>
+      <div class="seg"><button id="onCreate">Crear partida</button><input id="onCode" maxlength="4" placeholder="CÓDIGO" autocomplete="off" spellcheck="false"><button id="onJoin">Unirse</button></div>
+      <div class="onst" id="onStatus">Conectando…</div></div>
+    <div class="keys">
+      <div><b>Mover el mouse</b> mover la raqueta</div>
+      <div><b>Barrer hacia la red</b> más potencia</div>
+      <div><b>Barrer a un costado</b> apuntar a ese lado</div>
+      <div><b>Clic izq. mantenido</b> liftado fuerte</div>
+      <div><b>Clic der. mantenido</b> cortado (suave: dejada)</div>
+      <div><b>Tirar hacia vos</b> globo · <b>Esc</b> pausa · <b>M</b> sonido</div>
+    </div>
+    <div class="credit">Raquetas, pelotas y canchas hechas por código.</div>
+  </div>
+</div>
+
+<div class="menu" id="pause" hidden>
+  <div class="card over">
+    <h2>Pausa</h2>
+    <button class="go" id="resume">Seguir</button>
+    <div class="seg"><button id="quit">Volver al menú</button></div>
+  </div>
+</div>
+<div class="menu" id="end" hidden>
+  <div class="card over">
+    <h2 id="endT">Ganaste</h2>
+    <p id="endS"></p>
+    <button class="go" id="again">Revancha</button>
+    <div class="seg"><button id="toMenu">Menú</button></div>
+  </div>
+</div>
+<!--ASSETS-->
+<script>
