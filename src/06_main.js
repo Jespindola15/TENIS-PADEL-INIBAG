@@ -84,8 +84,17 @@ function tickHud(dt){
 }
 
 /* ---------- sonido sintetizado ---------- */
-let AC=null,master=null,muted=false,noiseBuf=null;
-function audioInit(){if(AC)return;try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=.8;master.connect(AC.destination);
+let AC=null,master=null,muted=false,noiseBuf=null,volume=.8;
+try{const v=JSON.parse(localStorage.getItem('potrero-sonido')||'null');if(v){muted=!!v.muted;volume=clamp(+v.volume,0,1);}}catch(e){}
+const ICON_ON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+const ICON_OFF='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
+function setSound(m,v){if(m!=null)muted=m;if(v!=null)volume=clamp(v,0,1);
+  if(master)master.gain.value=muted?0:volume;if(muted&&window.speechSynthesis)try{speechSynthesis.cancel();}catch(e){}
+  const b=document.getElementById('snd');if(b){b.innerHTML=muted?ICON_OFF:ICON_ON;b.classList.toggle('off',muted);}
+  const sg=document.getElementById('segSnd');if(sg)for(const x of sg.children)x.classList.toggle('on',(x.dataset.v==='off')===muted);
+  const r=document.getElementById('volR'),o=document.getElementById('volO');if(r){r.value=Math.round(volume*100);o.textContent=Math.round(volume*100)+'%';}
+  try{localStorage.setItem('potrero-sonido',JSON.stringify({muted,volume}));}catch(e){}}
+function audioInit(){if(AC)return;try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=muted?0:volume;master.connect(AC.destination);
   noiseBuf=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
   const mur=AC.createBufferSource();mur.buffer=noiseBuf;mur.loop=true;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=420;f.Q.value=.6;const g=AC.createGain();g.gain.value=.025;mur.connect(f);f.connect(g);g.connect(master);mur.start();}catch(e){AC=null;}}
 function burst(freq,q,dur,vol,type){if(!AC||muted)return;const t=AC.currentTime,s=AC.createBufferSource();s.buffer=noiseBuf;const f=AC.createBiquadFilter();f.type=type||'bandpass';f.frequency.value=freq;f.Q.value=q;
@@ -128,7 +137,7 @@ function frame(now){
   const raw=Math.min(.1,(now-(lastT||now))/1000);lastT=now;perfT+=raw;
   fpsN++;fpsT+=raw;if(fpsT>.5){$('fps').textContent=Math.round(fpsN/fpsT);fpsN=0;fpsT=0;}autoQuality(raw*1000);
   const inp=readInput();for(const k in edgeCarry)if(edgeCarry[k])inp[k]=true;edgeCarry={};
-  if(inp.mutep){muted=!muted;showSub(muted?'Sonido apagado':'Sonido encendido');}
+  if(inp.mutep){setSound(!muted);showSub(muted?'Sonido apagado':'Sonido encendido');}
   if(inp.startp&&M.state!=='menu'&&M.state!=='done'){togglePause();}
   if(M.state==='menu'||M.state==='paused'||M.state==='done'){renderer.render(scene,camera);menuCam(raw);return;}
   simAcc+=raw;let n=0;
@@ -165,6 +174,12 @@ function togglePause(){if(NET.on){$('pause').hidden=!$('pause').hidden;return;}i
 $('resume').addEventListener('click',()=>togglePause());
 $('quit').addEventListener('click',()=>{netLeave&&netLeave();$('pause').hidden=true;$('hud').hidden=true;$('menu').hidden=false;M.state='menu';});
 
+/* ---------- sonido: botón en el partido, opción y volumen en el menú ---------- */
+$('snd').addEventListener('click',e=>{e.stopPropagation();audioInit();setSound(!muted);});
+$('snd').addEventListener('pointerdown',e=>e.stopPropagation());
+$('segSnd').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;audioInit();setSound(b.dataset.v==='off');});
+$('volR').addEventListener('input',e=>{audioInit();setSound(+e.target.value===0?true:false,+e.target.value/100);});
+setSound();
 /* ---------- arranque ---------- */
 buildVenue('tennis','hard');
 (function boot(){

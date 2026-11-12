@@ -45,7 +45,14 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 .meter .fill{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,#3fd47a,#d9f23a 70%,#ff8a3d)}
 .meter .sweet{position:absolute;top:0;bottom:0;left:84%;width:9%;border-left:2px solid #fff;border-right:2px solid #fff;opacity:.7}
 
-.speed{position:absolute;right:calc(16px + env(safe-area-inset-right,0px));top:calc(14px + env(safe-area-inset-top,0px));font-family:var(--display);font-weight:700;background:var(--panel);padding:6px 12px;text-align:right;opacity:0;transition:opacity .3s}
+.snd{position:absolute;right:calc(16px + env(safe-area-inset-right,0px));top:calc(14px + env(safe-area-inset-top,0px));width:44px;height:44px;display:grid;place-items:center;
+  background:var(--panel);border:1px solid var(--line);color:var(--ink);cursor:pointer;pointer-events:auto;padding:0}
+.snd:hover{border-color:var(--ball)}.snd svg{width:22px;height:22px}
+.snd.off{color:var(--bad)}
+.vol{display:flex;align-items:center;gap:12px}
+.vol input[type=range]{flex:1;accent-color:#d9f23a}
+.vol output{font:700 16px var(--display);min-width:44px;text-align:right}
+.speed{position:absolute;right:calc(68px + env(safe-area-inset-right,0px));top:calc(14px + env(safe-area-inset-top,0px));font-family:var(--display);font-weight:700;background:var(--panel);padding:6px 12px;text-align:right;opacity:0;transition:opacity .3s}
 .speed.on{opacity:1}
 .speed b{font-size:26px;color:var(--ball)}
 .speed span{display:block;font-size:12px;letter-spacing:.14em;color:var(--muted)}
@@ -89,11 +96,12 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
     <div class="row" id="r0"><i class="chip" id="c0"></i><div class="nm"><i class="sv"></i><span id="n0">—</span></div><div class="sets" id="s0"></div><div class="pts" id="p0">0</div></div>
     <div class="row" id="r1"><i class="chip" id="c1"></i><div class="nm"><i class="sv"></i><span id="n1">—</span></div><div class="sets" id="s1"></div><div class="pts" id="p1">0</div></div>
   </div>
+  <button class="snd" id="snd" title="Sonido (M)" aria-label="Sacar o poner el sonido"></button>
   <div class="speed" id="speed"><b id="spv">0</b> km/h<span>VELOCIDAD DEL SAQUE</span></div>
   <div class="call" id="call"></div>
   <div class="sub" id="sub"></div>
   <div class="meter" id="meter"><div class="lab"><span>POTENCIA</span><span id="mtip">Apretá de nuevo arriba</span></div><div class="bar"><div class="sweet"></div><div class="fill" id="mfill"></div></div></div>
-  <div class="help"><b class="fps" id="fps">—</b> fps · <b>Mouse</b> raqueta · <b>Clic izq.</b> más fuerte · <b>Clic der.</b> cortado · <b>Tirar hacia atrás</b> globo · <b>Esc</b> pausa</div>
+  <div class="help"><b class="fps" id="fps">—</b> fps · <b>Mouse</b> raqueta · <b>Clic izq.</b> más fuerte · <b>Clic der.</b> cortado · <b>Tirar hacia atrás</b> globo · <b>Esc</b> pausa · <b>M</b> sonido</div>
 </div>
 
 <div class="menu" id="menu">
@@ -105,6 +113,8 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
     <div class="opt" id="optSurf"><span>Superficie</span><div class="seg" id="segSurf"><button data-v="hard" class="on">Cemento</button><button data-v="clay">Polvo de ladrillo</button><button data-v="grass">Césped</button></div></div>
     <div class="opt"><span>Rival</span><div class="seg" id="segDiff"><button data-v="easy">Fácil</button><button data-v="normal" class="on">Normal</button><button data-v="hard">Difícil</button></div></div>
     <div class="opt"><span>Partido</span><div class="seg" id="segLen"><button data-v="short" class="on">Rápido · 1 set a 3</button><button data-v="set">1 set a 6</button><button data-v="bo3">Al mejor de 3</button></div></div>
+    <div class="opt"><span>Sonido</span><div class="vol"><div class="seg" id="segSnd"><button data-v="on" class="on">Con sonido</button><button data-v="off">Sin sonido</button></div>
+      <input type="range" id="volR" min="0" max="100" value="80" aria-label="Volumen"><output id="volO">80%</output></div></div>
     <div class="opt"><span>Gráficos</span><div class="seg" id="segQ"><button data-v="auto" class="on">Auto</button><button data-v="0">Alta</button><button data-v="1">Media</button><button data-v="2">Baja</button></div></div>
     <button class="go" id="play" disabled>Cargando…</button>
     <div class="opt online"><span>Online · tiempo real</span>
