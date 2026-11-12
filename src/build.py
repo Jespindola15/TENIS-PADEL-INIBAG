@@ -6,4 +6,5 @@ js=''.join(open(S+f,encoding='utf-8').read()+'\n' for f in order)
 head=open(S+'head.html',encoding='utf-8').read().replace('<!--ASSETS-->','')
 out=head+js+'\n</script>\n'
 open(os.path.join(S,'..','Potrero Raqueta.html'),'w',encoding='utf-8').write(out)
+open(os.path.join(S,'..','index.html'),'w',encoding='utf-8').write(out)  # Netlify / GitHub Pages abren index.html
 print('size',len(out))
