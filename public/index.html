@@ -1101,8 +1101,7 @@ function setSound(m,v){if(m!=null)muted=m;if(v!=null)volume=clamp(v,0,1);
   const r=document.getElementById('volR'),o=document.getElementById('volO');if(r){r.value=Math.round(volume*100);o.textContent=Math.round(volume*100)+'%';}
   try{localStorage.setItem('potrero-sonido',JSON.stringify({muted,volume}));}catch(e){}}
 function audioInit(){if(AC)return;try{AC=new (window.AudioContext||window.webkitAudioContext)();master=AC.createGain();master.gain.value=muted?0:volume;master.connect(AC.destination);
-  noiseBuf=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
-  const mur=AC.createBufferSource();mur.buffer=noiseBuf;mur.loop=true;const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=420;f.Q.value=.6;const g=AC.createGain();g.gain.value=.025;mur.connect(f);f.connect(g);g.connect(master);mur.start();}catch(e){AC=null;}}
+  noiseBuf=AC.createBuffer(1,AC.sampleRate*2,AC.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;}catch(e){AC=null;}}
 function burst(freq,q,dur,vol,type){if(!AC||muted)return;const t=AC.currentTime,s=AC.createBufferSource();s.buffer=noiseBuf;const f=AC.createBiquadFilter();f.type=type||'bandpass';f.frequency.value=freq;f.Q.value=q;
   const g=AC.createGain();g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);s.connect(f);f.connect(g);g.connect(master);s.start(t,Math.random());s.stop(t+dur+.05);}
 function tone(freq,dur,vol,type){if(!AC||muted)return;const t=AC.currentTime,o=AC.createOscillator();o.type=type||'sine';o.frequency.setValueAtTime(freq,t);o.frequency.exponentialRampToValueAtTime(freq*.55,t+dur);
